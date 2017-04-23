@@ -36,14 +36,14 @@ def main():
 
 
     """ Loading mobile camera images """
-    #camimg = cv2.imread("input\\20131207_155745.jpg")    
-    camimg = cv2.imread("input\\20131207_155757.jpg")
+    camimg = cv2.imread("input\\20131207_155745.jpg")    
+    #camimg = cv2.imread("input\\20131207_155757.jpg")
     #img_cam  = cv2.imread(argv[1])
 
 
     """ Loading GPS and accerelometer data """
-    #sensordata = Bo.SensorData("input\\20131207_155745.txt")
-    sensordata = Bo.SensorData("input\\20131207_155757.txt")
+    sensordata = Bo.SensorData("input\\20131207_155745.txt")
+    #sensordata = Bo.SensorData("input\\20131207_155757.txt")
     #sensordata = Bo.SensorData(argv[2])
     print(sensordata)
 
@@ -71,11 +71,11 @@ def main():
 
     """ Mobile camera localization """
     print("CAMERA LOCALIZATION...")
-    locrat = Bl.localize(proj21, K)
+    locrot = Bl.localize(proj21, K)
 
 
     """ Display result """
-    print(locrat)    
+    print(locrot)    
     
 
     """ Display image """

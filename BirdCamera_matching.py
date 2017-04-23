@@ -13,10 +13,41 @@ import sys
 
 
 """ Const Numbers """
-NN_DIST_RATIO   = 0.65
-MIN_MATCH_COUNT = 8
-RANSAC_THRESH   = 0.50
-DRAW_PARAMS     = dict(matchColor=(0,255,255),singlePointColor=(255,0,0),flags=0)
+NN_DIST_RATIO      = 0.65
+MIN_MATCH_COUNT    = 8
+THRESH_RANSAC      = 0.50
+PARAMS_DRAW        = dict(matchColor=(0,255,255),singlePointColor=(255,0,0),flags=0)
+NUM_HIST_ANGLE     = 360
+NUM_HIST_OCTAVE    = 32
+THRESH_HIST_ANGLE  = 30
+THREXH_HIST_OCTAVE = 1
+
+"""============================================================================
+    createHist()
+============================================================================"""
+def createHist(_matches):
+
+    hist_angle  = [0] * NUM_HIST_ANGLE
+    hist_octave = [0] * (NUM_HIST_OCTAVE * 2 + 1)
+    
+    
+    for m,n in _matches:
+
+        """ Angle """
+        gap_angle  = int(m.angle  - n.angle + 0.5)
+        while (gap_angle < 0):
+            gap_angle += NUM_HIST_ANGLE
+        hist_angle[gap_angle] += 1
+
+
+        """ Octave """        
+        gap_octave = m.octave - n.octave
+        if ((gap_octave < -NUM_HIST_OCTAVE) or (NUM_HIST_OCTAVE < gap_octave)):
+            continue
+        hist_octave[gap_octave + NUM_HIST_OCTAVE] += 1
+
+
+    return [hist_angle, hist_octave]
 
 
 """============================================================================
@@ -24,10 +55,20 @@ DRAW_PARAMS     = dict(matchColor=(0,255,255),singlePointColor=(255,0,0),flags=0
 ============================================================================"""
 def pickGoodMatches(_matches):
     
+    hist_angle, hist_octave = createHist(_matches)
+
+    num_max_hist_angle  = max(hist_angle)
+    num_max_hist_octave = max(hist_octave)
+    id_max_hist_angle   = hist_angle.index(num_max_hist_angle) 
+    id_max_hist_octave  = hist_angle.index(num_max_hist_octave) 
+    
+        
+    
     good = []
     for m,n in _matches:
         if m.distance < NN_DIST_RATIO*n.distance:
             good.append(m)
+            
     return good
 
 
@@ -130,16 +171,15 @@ def kpMatch(_img0, _img1):
         dstPts = np.float32([kp1[m.trainIdx].pt for m in good]).reshape(-1,1,2)
 
         """ Calculating homography """
-        proj2, mask = cv2.findHomography(srcPts, dstPts, cv2.RANSAC, RANSAC_THRESH)
+        proj2, mask = cv2.findHomography(srcPts, dstPts, cv2.RANSAC, THRESH_RANSAC)
     
     
-    """ Display Matching Result """
-    #cv2.imshow("Match", img2)
+    """ Draw Matching Result """
     #img2 = drawMatch(_img0, srcPts, _img1, dstPts)
-    img2 = cv2.drawMatchesKnn(_img0, kp0, _img1, kp1,[good], None, **DRAW_PARAMS)
+    img2 = cv2.drawMatchesKnn(_img0, kp0, _img1, kp1,[good], None, **PARAMS_DRAW)
     
     
-    """ Display Detection&Description Results """
+    """ Draw Detection&Description Results """
     kpimg0 = cv2.drawKeypoints(_img0, kp0, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     kpimg1 = cv2.drawKeypoints(_img1, kp1, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     
