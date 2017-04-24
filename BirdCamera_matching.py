@@ -10,22 +10,25 @@ import BirdCamera as Bcamera
 import numpy as np
 import cv2
 import sys
+from matplotlib import pyplot as plt
 
 
 """ Const Numbers """
-NN_DIST_RATIO      = 0.65
+NN_DIST_RATIO      = 0.80
 MIN_MATCH_COUNT    = 8
 THRESH_RANSAC      = 0.50
 PARAMS_DRAW        = dict(matchColor=(0,255,255),singlePointColor=(255,0,0),flags=0)
 NUM_HIST_ANGLE     = 360
 NUM_HIST_OCTAVE    = 32
-THRESH_HIST_ANGLE  = 30
-THREXH_HIST_OCTAVE = 1
+THRESH_HIST_ANGLE  = 15
+THRESH_HIST_OCTAVE = 2
+
+
 
 """============================================================================
     createHist()
 ============================================================================"""
-def createHist(_matches):
+def createHist(_kp0, _kp1, _matches):
 
     hist_angle  = [0] * NUM_HIST_ANGLE
     hist_octave = [0] * (NUM_HIST_OCTAVE * 2 + 1)
@@ -34,14 +37,16 @@ def createHist(_matches):
     for m,n in _matches:
 
         """ Angle """
-        gap_angle  = int(m.angle  - n.angle + 0.5)
+        gap_angle = int(_kp0[m.queryIdx].angle - _kp1[m.trainIdx].angle + 0.5)
         while (gap_angle < 0):
             gap_angle += NUM_HIST_ANGLE
         hist_angle[gap_angle] += 1
 
 
         """ Octave """        
-        gap_octave = m.octave - n.octave
+        gap_octave = _kp0[m.queryIdx].octave - _kp1[m.trainIdx].octave
+        #print(_kp0[m.queryIdx].octave, end=' ')
+        #print(_kp1[m.trainIdx].octave)
         if ((gap_octave < -NUM_HIST_OCTAVE) or (NUM_HIST_OCTAVE < gap_octave)):
             continue
         hist_octave[gap_octave + NUM_HIST_OCTAVE] += 1
@@ -50,25 +55,58 @@ def createHist(_matches):
     return [hist_angle, hist_octave]
 
 
+
+"""============================================================================
+    calcDiffHistAngle()
+============================================================================"""
+def calcDiffHistAngle(_id0, _id1):
+
+    dif = _id0 - _id1
+
+    while(not(0 <= dif < NUM_HIST_ANGLE)):
+        
+        if (dif < 0):
+            dif += NUM_HIST_ANGLE
+            
+        elif(NUM_HIST_ANGLE <= dif):
+            dif -= NUM_HIST_ANGLE
+
+       
+    return dif
+
+
+
 """============================================================================
     pickGoodMatches()
 ============================================================================"""
-def pickGoodMatches(_matches):
+def pickGoodMatches(_kp0, _kp1, _matches):
     
-    hist_angle, hist_octave = createHist(_matches)
+    hist_angle, hist_octave = createHist(_kp0, _kp1, _matches)
+    plt.plot(hist_angle)
+    plt.show()
 
     num_max_hist_angle  = max(hist_angle)
     num_max_hist_octave = max(hist_octave)
     id_max_hist_angle   = hist_angle.index(num_max_hist_angle) 
     id_max_hist_octave  = hist_angle.index(num_max_hist_octave) 
     
-        
-    
     good = []
+
     for m,n in _matches:
-        if m.distance < NN_DIST_RATIO*n.distance:
+
+        dif_angle  = int(_kp0[m.queryIdx].angle - _kp1[m.trainIdx].angle + 0.5)
+        dif_octave = _kp0[m.queryIdx].octave - _kp1[m.trainIdx].octave
+        
+        dif_hist_angle  = calcDiffHistAngle(id_max_hist_angle, dif_angle)
+        dif_hist_octave = abs(id_max_hist_octave - dif_octave)
+        
+        f_dist   = (m.distance < NN_DIST_RATIO * n.distance)
+        f_angle  = (dif_hist_angle  < THRESH_HIST_ANGLE)
+        f_octave = (dif_hist_octave < THRESH_HIST_OCTAVE)
+
+        if (f_dist and f_angle): # and f_octave):
             good.append(m)
-            
+
     return good
 
 
@@ -118,11 +156,9 @@ def kpMatch(_img0, _img1):
     gry1 = cv2.cvtColor(_img1, cv2.COLOR_BGR2GRAY)
     
     
-    """ SIFT, SURF, others... """
     """-------------------------------------------------------
-    ※ SIFT,SURFはopencv_contrib内にあり、特許が取られている関係から別途コンパイルする必要がある。
-    そういった作業が必要ない手法としてはORBやFREAKなどを使う。
-    ※ SIFT以外ならAKAZEが意外とマッチング結果がいいが、スケール変化には弱い印象・・・
+       SIFT, SURF, ORB, etc.
+       *Not all of detectors & descriptors
     -------------------------------------------------------"""
 
     """ Detector """
@@ -156,14 +192,14 @@ def kpMatch(_img0, _img1):
     """ Matching """
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(dsc0, dsc1, k=2)
-    good = pickGoodMatches(matches)
+    good = pickGoodMatches(kp0, kp1, matches)
     
     
     """" Compute Homography"""
     if(len(good) < MIN_MATCH_COUNT):
         """ In case of few matches """
         print("[ERROR] Not enough matches are found...\n")
-        exit(-1)
+        sys.exit(-1)
 
     else:
         """ Enough number of matches """
