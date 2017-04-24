@@ -30,16 +30,24 @@ THRESH_HIST_OCTAVE = 2
 ============================================================================"""
 def createHist(_kp0, _kp1, _matches):
 
+    """
+    Creating histograms
+    """
+    
+
+    """ Create lists """
     hist_angle  = [0] * NUM_HIST_ANGLE
     hist_octave = [0] * (NUM_HIST_OCTAVE * 2 + 1)
     
-
+    
+    """ Roop for all matches """
     for m in _matches:
 
         """ Angle """
         gap_angle = int(_kp0[m.queryIdx].angle - _kp1[m.trainIdx].angle + 0.5)
         while (gap_angle < 0):
             gap_angle += NUM_HIST_ANGLE
+
         hist_angle[gap_angle] += 1
 
 
@@ -47,6 +55,7 @@ def createHist(_kp0, _kp1, _matches):
         gap_octave = (_kp0[m.queryIdx].octave&(NUM_HIST_OCTAVE-1)) - (_kp1[m.trainIdx].octave&(NUM_HIST_OCTAVE-1))
         if ((gap_octave < -NUM_HIST_OCTAVE) or (NUM_HIST_OCTAVE < gap_octave)):
             continue
+
         hist_octave[gap_octave + NUM_HIST_OCTAVE] += 1
 
 
@@ -59,8 +68,16 @@ def createHist(_kp0, _kp1, _matches):
 ============================================================================"""
 def calcDiffHistAngle(_id0, _id1):
 
+    """
+    Calcurating the gap of two bins in angle histogram
+    """
+    
+
+    """ Simple gap """
     dif = _id0 - _id1
 
+
+    """ Clip in range[0-359] """
     while(not(0 <= dif < NUM_HIST_ANGLE)):
         
         if (dif < 0):
@@ -79,89 +96,70 @@ def calcDiffHistAngle(_id0, _id1):
 ============================================================================"""
 def pickGoodMatches(_kp0, _kp1, _matches):
     
+    """
+    Picking better matches
+    """
+    
+
+    """ thresholded by distance """
     g  = []
+
+    """ thresholded by distance, angle and octave """
     g_ = []
 
 
+    """ Thresholding based on distance """    
     for m1,n1 in _matches:
         f_dist   = (m1.distance < NN_DIST_RATIO * n1.distance)
         if (f_dist):
             g.append(m1)
 
 
+    """ Creating histograms """
     hist_angle, hist_octave = createHist(_kp0, _kp1, g)
 
+
+    """ Preview of histograms """
     plt.figure(100)
     plt.title("Angle dif histogram")
     plt.plot(hist_angle)
-
     plt.figure(101)
     plt.title("Octave dif histogram")
     plt.plot(hist_octave)
-   
-    #plt.show()
     plt.pause(2.0)
     
-
+    
+    """ Get max and its index """
     num_max_hist_angle  = max(hist_angle)
     num_max_hist_octave = max(hist_octave)
     id_max_hist_angle   = hist_angle.index(num_max_hist_angle) 
     id_max_hist_octave  = hist_octave.index(num_max_hist_octave) 
     
-    
+
+    """ Thresholding based on angle and octave """    
     for m2 in g:
 
+        """ Angle bin number """
         dif_angle  = int(_kp0[m2.queryIdx].angle - _kp1[m2.trainIdx].angle + 0.5)
 
+        """ Octave bin number """
         dif_octave = (_kp0[m2.queryIdx].octave&(NUM_HIST_OCTAVE-1)) - (_kp1[m2.trainIdx].octave&(NUM_HIST_OCTAVE-1))
         dif_octave += NUM_HIST_OCTAVE + 1
 
+        """ Calcurate the gap from max bin """
         dif_hist_angle  = calcDiffHistAngle(id_max_hist_angle, dif_angle)
         dif_hist_octave = abs(id_max_hist_octave - dif_octave)
         
+        """ Flags """
         f_angle  = (dif_hist_angle  < THRESH_HIST_ANGLE)
         f_octave = (dif_hist_octave < THRESH_HIST_OCTAVE)
 
+        """ Add for g_ """
         if (f_angle and f_octave):
             g_.append(m2)
 
     return g_
 
-
-"""============================================================================
-    drawMatch()
-============================================================================"""
-def drawMatch(_img0, _kps0, _img1, _kps1):
-    
-    """ Size of each image """
-    h0, w0 = _img0.shape[:2]
-    h1, w1 = _img1.shape[:2]
-
-
-    """ Copying before resize """
-    i0 = _img0.copy()
-    i1 = _img1.copy()
-
-
-    """ Determining height size """
-    if(h0 < h1):
-        i0.resize((h1, w0))
-    elif(h0 > h1):
-        i1.resize((h0, w1))
-
-
-    """ Combining """ #結局縦連結はメモリ配置の関係で難しいという結論。横だけでやる。
-    merge = cv2.hconcat([i0, i1])
-    
-    
-    """ drawing line """
-
-
-    """ Displaying """
-    cv2.imshow("merge", merge)
-
-
-    #return 
 
 
 """============================================================================
@@ -229,7 +227,6 @@ def kpMatch(_img0, _img1):
     
     
     """ Draw Matching Result """
-    #img2 = drawMatch(_img0, srcPts, _img1, dstPts)
     img2 = cv2.drawMatchesKnn(_img0, kp0, _img1, kp1, [good], None, **PARAMS_DRAW)
     
     
