@@ -75,6 +75,7 @@ def main():
 
 
     """ Display result """
+    """ *Includes bugs. """
     print(locrot)    
     
 

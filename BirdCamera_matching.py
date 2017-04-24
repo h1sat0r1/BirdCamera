@@ -14,7 +14,7 @@ from matplotlib import pyplot as plt
 
 
 """ Const Numbers """
-NN_DIST_RATIO      = 0.80
+NN_DIST_RATIO      = 0.75
 MIN_MATCH_COUNT    = 8
 THRESH_RANSAC      = 0.50
 PARAMS_DRAW        = dict(matchColor=(0,255,255),singlePointColor=(255,0,0),flags=0)
@@ -33,8 +33,8 @@ def createHist(_kp0, _kp1, _matches):
     hist_angle  = [0] * NUM_HIST_ANGLE
     hist_octave = [0] * (NUM_HIST_OCTAVE * 2 + 1)
     
-    
-    for m,n in _matches:
+
+    for m in _matches:
 
         """ Angle """
         gap_angle = int(_kp0[m.queryIdx].angle - _kp1[m.trainIdx].angle + 0.5)
@@ -44,9 +44,7 @@ def createHist(_kp0, _kp1, _matches):
 
 
         """ Octave """        
-        gap_octave = _kp0[m.queryIdx].octave - _kp1[m.trainIdx].octave
-        #print(_kp0[m.queryIdx].octave, end=' ')
-        #print(_kp1[m.trainIdx].octave)
+        gap_octave = (_kp0[m.queryIdx].octave&(NUM_HIST_OCTAVE-1)) - (_kp1[m.trainIdx].octave&(NUM_HIST_OCTAVE-1))
         if ((gap_octave < -NUM_HIST_OCTAVE) or (NUM_HIST_OCTAVE < gap_octave)):
             continue
         hist_octave[gap_octave + NUM_HIST_OCTAVE] += 1
@@ -81,33 +79,53 @@ def calcDiffHistAngle(_id0, _id1):
 ============================================================================"""
 def pickGoodMatches(_kp0, _kp1, _matches):
     
-    hist_angle, hist_octave = createHist(_kp0, _kp1, _matches)
+    g  = []
+    g_ = []
+
+
+    for m1,n1 in _matches:
+        f_dist   = (m1.distance < NN_DIST_RATIO * n1.distance)
+        if (f_dist):
+            g.append(m1)
+
+
+    hist_angle, hist_octave = createHist(_kp0, _kp1, g)
+
+    plt.figure(100)
+    plt.title("Angle dif histogram")
     plt.plot(hist_angle)
-    plt.show()
+
+    plt.figure(101)
+    plt.title("Octave dif histogram")
+    plt.plot(hist_octave)
+   
+    #plt.show()
+    plt.pause(2.0)
+    
 
     num_max_hist_angle  = max(hist_angle)
     num_max_hist_octave = max(hist_octave)
     id_max_hist_angle   = hist_angle.index(num_max_hist_angle) 
-    id_max_hist_octave  = hist_angle.index(num_max_hist_octave) 
+    id_max_hist_octave  = hist_octave.index(num_max_hist_octave) 
     
-    good = []
+    
+    for m2 in g:
 
-    for m,n in _matches:
+        dif_angle  = int(_kp0[m2.queryIdx].angle - _kp1[m2.trainIdx].angle + 0.5)
 
-        dif_angle  = int(_kp0[m.queryIdx].angle - _kp1[m.trainIdx].angle + 0.5)
-        dif_octave = _kp0[m.queryIdx].octave - _kp1[m.trainIdx].octave
-        
+        dif_octave = (_kp0[m2.queryIdx].octave&(NUM_HIST_OCTAVE-1)) - (_kp1[m2.trainIdx].octave&(NUM_HIST_OCTAVE-1))
+        dif_octave += NUM_HIST_OCTAVE + 1
+
         dif_hist_angle  = calcDiffHistAngle(id_max_hist_angle, dif_angle)
         dif_hist_octave = abs(id_max_hist_octave - dif_octave)
         
-        f_dist   = (m.distance < NN_DIST_RATIO * n.distance)
         f_angle  = (dif_hist_angle  < THRESH_HIST_ANGLE)
         f_octave = (dif_hist_octave < THRESH_HIST_OCTAVE)
 
-        if (f_dist and f_angle): # and f_octave):
-            good.append(m)
+        if (f_angle and f_octave):
+            g_.append(m2)
 
-    return good
+    return g_
 
 
 """============================================================================
@@ -193,7 +211,7 @@ def kpMatch(_img0, _img1):
     bf = cv2.BFMatcher()
     matches = bf.knnMatch(dsc0, dsc1, k=2)
     good = pickGoodMatches(kp0, kp1, matches)
-    
+   
     
     """" Compute Homography"""
     if(len(good) < MIN_MATCH_COUNT):
@@ -212,7 +230,7 @@ def kpMatch(_img0, _img1):
     
     """ Draw Matching Result """
     #img2 = drawMatch(_img0, srcPts, _img1, dstPts)
-    img2 = cv2.drawMatchesKnn(_img0, kp0, _img1, kp1,[good], None, **PARAMS_DRAW)
+    img2 = cv2.drawMatchesKnn(_img0, kp0, _img1, kp1, [good], None, **PARAMS_DRAW)
     
     
     """ Draw Detection&Description Results """
